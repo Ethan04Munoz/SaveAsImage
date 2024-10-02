@@ -4,7 +4,7 @@ let conversionInProgress = false;
 function createOrUpdateContextMenu() {
     browser.storage.local.get('defaultFileType').then(result => {
         const defaultFileType = result.defaultFileType || 'png';
-        const title = `Convert to ${defaultFileType.toUpperCase()}`;
+        const title = `Save as ${defaultFileType.toUpperCase()}`;
 
         // Eliminar el menú contextual existente si existe
         browser.contextMenus.removeAll().then(() => {
