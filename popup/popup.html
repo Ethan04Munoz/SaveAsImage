@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Mi Extensión</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+    <div class="container">
+        <h1>Mi Extensión Firefox</h1>
+
+        <div class="feature-section">
+            <h2>Contador de Clics</h2>
+            <button id="clickButton">¡Haz clic!</button>
+            <p>Has hecho clic <span id="clickCount">0</span> veces</p>
+        </div>
+
+        <div class="feature-section">
+            <h2>Cambia el Color</h2>
+            <input type="color" id="colorPicker" value="#FF0000">
+            <button id="changeColor">Aplicar Color</button>
+        </div>
+
+        <div class="feature-section">
+            <h2>Información de la Página</h2>
+            <button id="getInfo">Obtener Info</button>
+            <div id="pageInfo"></div>
+        </div>
+    </div>
+    <script src="popup.js"></script>
+</body>
+
+</html>
