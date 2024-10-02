@@ -3,30 +3,21 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>Mi Extensión</title>
+    <title>Save to Image</title>
     <link rel="stylesheet" href="popup.css">
 </head>
 
 <body>
     <div class="container">
-        <h1>Mi Extensión Firefox</h1>
+        <h1>Save to Image</h1>
 
         <div class="feature-section">
-            <h2>Contador de Clics</h2>
-            <button id="clickButton">¡Haz clic!</button>
-            <p>Has hecho clic <span id="clickCount">0</span> veces</p>
-        </div>
-
-        <div class="feature-section">
-            <h2>Cambia el Color</h2>
-            <input type="color" id="colorPicker" value="#FF0000">
-            <button id="changeColor">Aplicar Color</button>
-        </div>
-
-        <div class="feature-section">
-            <h2>Información de la Página</h2>
-            <button id="getInfo">Obtener Info</button>
-            <div id="pageInfo"></div>
+            <h2>Tipo de archivo predeterminado</h2>
+            <select id="fileTypeSelect">
+                <option value="png">PNG</option>
+                <option value="jpg">JPG</option>
+                <option value="webp">WEBP</option>
+            </select>
         </div>
     </div>
     <script src="popup.js"></script>

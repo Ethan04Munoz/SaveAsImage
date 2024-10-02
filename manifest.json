@@ -12,7 +12,8 @@
     "<all_urls>",
     "activeTab",
     "notifications",
-    "tabs"
+    "tabs",
+    "storage"
   ],
   "background": {
     "scripts": [

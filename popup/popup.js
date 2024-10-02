@@ -1,49 +1,21 @@
 document.addEventListener('DOMContentLoaded', function () {
-    // Contador de clics
-    let clickCount = 0;
-    const clickButton = document.getElementById('clickButton');
-    const clickCountDisplay = document.getElementById('clickCount');
+    // Obtener el elemento select
+    const fileTypeSelect = document.getElementById('fileTypeSelect');
 
-    clickButton.addEventListener('click', function () {
-        clickCount++;
-        clickCountDisplay.textContent = clickCount;
-        browser.storage.local.set({ clickCount: clickCount });
-    });
-
-    // Cargar el conteo guardado
-    browser.storage.local.get('clickCount').then(result => {
-        if (result.clickCount) {
-            clickCount = result.clickCount;
-            clickCountDisplay.textContent = clickCount;
+    // Cargar la preferencia guardada (si existe)
+    browser.storage.local.get('defaultFileType').then(result => {
+        if (result.defaultFileType) {
+            fileTypeSelect.value = result.defaultFileType;
         }
     });
 
-    // Cambiar color
-    const colorPicker = document.getElementById('colorPicker');
-    const changeColorButton = document.getElementById('changeColor');
+    // Manejar el cambio de selección
+    fileTypeSelect.addEventListener('change', function () {
+        const selectedFileType = fileTypeSelect.value;
+        console.log('Tipo de archivo seleccionado:', selectedFileType);
 
-    changeColorButton.addEventListener('click', function () {
-        const color = colorPicker.value;
-        browser.tabs.query({ active: true, currentWindow: true })
-            .then(tabs => {
-                browser.tabs.executeScript(tabs[0].id, {
-                    code: `document.body.style.backgroundColor = '${color}';`
-                });
-            });
+        // Guardar la preferencia seleccionada
+        browser.storage.local.set({ defaultFileType: selectedFileType });
     });
 
-    // Obtener información de la página
-    const getInfoButton = document.getElementById('getInfo');
-    const pageInfoDiv = document.getElementById('pageInfo');
-
-    getInfoButton.addEventListener('click', function () {
-        browser.tabs.query({ active: true, currentWindow: true })
-            .then(tabs => {
-                const currentTab = tabs[0];
-                pageInfoDiv.innerHTML = `
-            <p><strong>URL:</strong> ${currentTab.url}</p>
-            <p><strong>Título:</strong> ${currentTab.title}</p>
-          `;
-            });
-    });
 });
