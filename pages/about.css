@@ -1,0 +1,83 @@
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f4f4f9;
+  color: #333;
+  margin: 20px;
+  padding: 20px;
+}
+
+h1 {
+  color: #2c3e50;
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+p {
+  line-height: 1.6;
+  margin-bottom: 20px;
+}
+
+.author {
+  text-align: center;
+  font-style: italic;
+  margin-bottom: 40px;
+  color: #7f8c8d;
+}
+
+.date{
+    text-align: left;
+    font-style: italic;
+    margin-bottom: 40px;
+    color: #7f8c8d;
+}
+
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+  background-color: #fff;
+  padding: 30px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+.footer {
+  text-align: center;
+  margin-top: 40px;
+  font-size: 14px;
+  color: #7f8c8d;
+}
+
+.github{
+    width: 100px;
+    border-radius: 50%;
+    transition: ease all 0.2s;
+}
+
+.github:hover {
+    box-shadow: 0px 0px 15px 0px rgba(83, 157, 255, 0.336);
+}
+
+/* Modo oscuro */
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #121212;
+    color: #e0e0e0;
+  }
+
+  .container {
+    background-color: #1e1e1e;
+    box-shadow: 0 2px 10px rgba(255, 255, 255, 0.1);
+  }
+
+  h1 {
+    color: #ffffff;
+  }
+
+  .author {
+    color: #b0b0b0;
+  }
+
+  .footer {
+    color: #b0b0b0;
+  }
+}
