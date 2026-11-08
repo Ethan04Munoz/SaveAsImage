@@ -105,18 +105,18 @@ function canvasToBlob(canvas, mimeType, quality) {
     });
 }
 
+// Los blob: URL pertenecen al sitio que los creó: el background no puede leerlos.
+function isBlobUrl(url) {
+    try {
+        return new URL(url).protocol === "blob:";
+    } catch (e) {
+        return false;
+    }
+}
+
 // Descarga la imagen desde el background (tiene el permiso <all_urls>, por lo que
 // no está limitado por CORS) y la re-codifica con canvas.
-async function convertImage(imageUrl, fileType) {
-    const mimeType = MIME_TYPES[fileType];
-    if (!mimeType) {
-        throw new Error(`Tipo de archivo no soportado: ${fileType}`);
-    }
-
-    if (!imageUrl) {
-        throw new Error("No se pudo obtener la URL de la imagen");
-    }
-
+async function convertInBackground(imageUrl, mimeType) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), CONVERT_TIMEOUT_MS);
     let sourceBlob;
@@ -201,6 +201,100 @@ async function convertImage(imageUrl, fileType) {
         return result;
     } finally {
         URL.revokeObjectURL(objectUrl);
+    }
+}
+
+// Respaldo: pide al content script que convierta la imagen dentro de la propia
+// página, donde sí es accesible (blob:, sesión, protección de hotlink...).
+async function convertInPage(imageUrl, fileType, tab, frameId) {
+    const mimeType = MIME_TYPES[fileType];
+
+    if (!tab || tab.id === undefined) {
+        throw new Error("No se puede acceder a la imagen desde la pestaña actual");
+    }
+
+    const options = frameId === undefined ? {} : { frameId: frameId };
+    let response;
+
+    try {
+        response = await withTimeout(
+            browser.tabs.sendMessage(tab.id, {
+                action: "convertToImage",
+                imageUrl: imageUrl,
+                fileType: fileType
+            }, options),
+            CONVERT_TIMEOUT_MS,
+            "La conversión dentro de la página tardó demasiado"
+        );
+    } catch (error) {
+        const message = (error && error.message) || "";
+
+        // El content script no está inyectado (pestaña abierta antes de
+        // instalar, página restringida o frame sin permisos).
+        if (/Receiving end does not exist|Could not establish connection/i.test(message)) {
+            throw new Error("No se pudo acceder a la imagen desde la página. Recarga la pestaña e inténtalo de nuevo.");
+        }
+
+        throw error;
+    }
+
+    if (!response) {
+        throw new Error("La página no respondió a la conversión");
+    }
+
+    if (response.error) {
+        throw new Error(response.error);
+    }
+
+    if (!response.imageData) {
+        throw new Error("La página no devolvió la imagen convertida");
+    }
+
+    const prefix = /^data:([^;,]+);base64,/i.exec(response.imageData);
+    if (!prefix) {
+        throw new Error("La página devolvió un formato de imagen no válido");
+    }
+
+    if (prefix[1].toLowerCase() !== mimeType) {
+        throw new Error(`El navegador no puede generar ${mimeType} (generó ${prefix[1]})`);
+    }
+
+    const blob = await (await fetch(response.imageData)).blob();
+
+    if (blob.type !== mimeType) {
+        throw new Error(`El navegador no puede generar ${mimeType} (generó ${blob.type || "un formato desconocido"})`);
+    }
+
+    return blob;
+}
+
+async function convertImage(imageUrl, fileType, tab, frameId) {
+    const mimeType = MIME_TYPES[fileType];
+
+    if (!mimeType) {
+        throw new Error(`Tipo de archivo no soportado: ${fileType}`);
+    }
+
+    if (!imageUrl) {
+        throw new Error("No se pudo obtener la URL de la imagen");
+    }
+
+    // Los blob: solo existen dentro del sitio que los creó.
+    if (isBlobUrl(imageUrl)) {
+        return convertInPage(imageUrl, fileType, tab, frameId);
+    }
+
+    try {
+        return await convertInBackground(imageUrl, mimeType);
+    } catch (error) {
+        console.warn("Conversión desde el background fallida, se intenta en la página:", error);
+
+        try {
+            return await convertInPage(imageUrl, fileType, tab, frameId);
+        } catch (pageError) {
+            console.warn("La conversión dentro de la página también falló:", pageError);
+            throw error;
+        }
     }
 }
 
@@ -368,7 +462,7 @@ async function startDownload(blob, filename, fileType) {
     }
 }
 
-async function downloadConvertedImage(imageUrl, tab) {
+async function downloadConvertedImage(imageUrl, tab, frameId) {
     const stored = await browser.storage.local.get('defaultFileType');
     const requestedType = stored.defaultFileType;
     const fileType = MIME_TYPES[requestedType] ? requestedType : 'png';
@@ -376,7 +470,7 @@ async function downloadConvertedImage(imageUrl, tab) {
     notify("conversion-start", "Convirtiendo imagen", `Iniciando la conversión a ${fileType.toUpperCase()}...`);
 
     try {
-        const blob = await convertImage(imageUrl, fileType);
+        const blob = await convertImage(imageUrl, fileType, tab, frameId);
         const filename = buildFileName(imageUrl, fileType, tab);
 
         await startDownload(blob, filename, fileType);
@@ -397,7 +491,7 @@ browser.contextMenus.onClicked.addListener((info, tab) => {
 
     conversionInProgress = true;
 
-    downloadConvertedImage(info.srcUrl, tab)
+    downloadConvertedImage(info.srcUrl, tab, info.frameId)
         .catch(error => {
             if (error && error.silent) {
                 // El usuario canceló el diálogo: no es un error que deba avisarse.
