@@ -11,6 +11,8 @@ const MIME_TYPES = {
 };
 
 const CONVERT_TIMEOUT_MS = 30000;
+// La consulta del alt/title es local y opcional: si tarda, se ignora.
+const IMAGE_INFO_TIMEOUT_MS = 1500;
 // Margen durante el cual se conserva el blobURL de una descarga fallida
 // para que el botón "Reintentar" del gestor de descargas siga funcionando.
 const BLOB_URL_TTL_MS = 15 * 60 * 1000;
@@ -298,43 +300,175 @@ async function convertImage(imageUrl, fileType, tab, frameId) {
     }
 }
 
-// Genera un nombre de archivo válido para el sistema operativo.
-function buildFileName(imageUrl, fileType, tab) {
+// ---------------------------------------------------------------------------
+// Nombre del archivo
+// ---------------------------------------------------------------------------
+
+// Nombres que no aportan nada: "image", "photo-2", "foto_1", "latest", etc.
+const GENERIC_BASE = /^(image|images|img|foto|fotos|imagen|imagenes|photo|photos|picture|pictures|pic|unnamed|untitled|download|file|asset|media|thumb|thumbnail|cover|banner|hero|default|placeholder|screenshot|capture|output|render|logo|latest|original|full|large|medium|small|current|main|index|new|enlarge|expand|zoom|preview|open image|view image|download image|ver imagen|ampliar imagen|click to enlarge|haz clic para ampliar)[-_ .]?\d*$/i;
+// Hashes, UUIDs y tokens de CDN.
+const HASH_NAME = /^[0-9a-f]{16,}$/i;
+const UUID_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const TOKEN_NAME = /^[a-z0-9]{28,}$/i;
+// Medidas de CDN: "1200x630".
+const SIZE_NAME = /^\d{2,5}\s*[x×]\s*\d{2,5}$/i;
+// "photo-1549880338-65ddcdfd017b" (Unsplash y similares).
+const GENERIC_PLUS_TOKEN = /^(image|img|photo|foto|picture|pic|thumb|thumbnail)[-_]?\d{4,}/i;
+const WINDOWS_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+
+// Indica si un nombre merece ser usado tal cual.
+function isMeaningfulBase(name) {
+    const value = (name || "").trim();
+
+    // En alfabetos no latinos dos caracteres ya son una palabra ("写真");
+    // en ASCII, menos de tres suele ser basura ("a", "x2").
+    const minLength = /^[\x20-\x7e]+$/.test(value) ? 3 : 2;
+
+    if (value.length < minLength) {
+        return false;
+    }
+
+    // Debe tener al menos una letra (vale cualquier alfabeto).
+    if (!/\p{L}/u.test(value)) {
+        return false;
+    }
+
+    if (GENERIC_BASE.test(value)) {
+        return false;
+    }
+
+    if (HASH_NAME.test(value) || UUID_NAME.test(value) || SIZE_NAME.test(value)) {
+        return false;
+    }
+
+    if (/^\d+$/.test(value)) {
+        return false;
+    }
+
+    if (TOKEN_NAME.test(value) && /\d/.test(value)) {
+        return false;
+    }
+
+    if (GENERIC_PLUS_TOKEN.test(value)) {
+        return false;
+    }
+
+    return true;
+}
+
+// Deja el nombre apto para cualquier sistema de archivos.
+function sanitizeName(name) {
+    let value = (name || "")
+        .replace(/[\\/:*?"<>|\u0000-\u001f]/g, " ")
+        .replace(/\s+/g, " ")
+        .replace(/^[.\s]+/, "")
+        .replace(/[.\s]+$/, "")
+        .trim();
+
+    if (WINDOWS_RESERVED.test(value)) {
+        value = `_${value}`;
+    }
+
+    return value;
+}
+
+// Nombre utilizable que viene en la URL (sin extensión ni sufijos de tamaño).
+function nameFromUrl(imageUrl) {
     let raw = "";
 
     try {
         const url = new URL(imageUrl);
 
         // Los data: y blob: no tienen nombre utilizable (el path es el base64/UUID).
-        if (url.protocol !== "data:" && url.protocol !== "blob:") {
-            raw = url.pathname.split("/").pop() || "";
+        if (url.protocol === "data:" || url.protocol === "blob:") {
+            return "";
+        }
 
-            try {
-                raw = decodeURIComponent(raw);
-            } catch (e) {
-                // Nombre con escapes inválidos: se usa tal cual.
-            }
+        raw = url.pathname.split("/").pop() || "";
+
+        try {
+            raw = decodeURIComponent(raw);
+        } catch (e) {
+            // Nombre con escapes inválidos: se usa tal cual.
         }
     } catch (e) {
-        // URL no parseable: se usará el título de la pestaña o "image".
+        return "";
     }
 
-    raw = raw.replace(/\.[^./\\]+$/, "");
-
-    if (!raw && tab && tab.title) {
-        raw = tab.title;
-    }
-
-    raw = raw
-        .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_")
-        .replace(/^\.+/, "")
+    return raw
+        .replace(/\.[^./\\]+$/, "")                 // extensión
+        .replace(/[-_]\d{2,5}x\d{2,5}$/i, "")       // sufijo de tamaño (WordPress/CDN)
         .trim();
+}
 
-    if (!raw) {
-        raw = "image";
+// Limpia texto humano (alt, title de la imagen o título de la pestaña):
+// los separadores y el nombre del sitio son ruido, no parte del asunto.
+function cleanHumanText(text) {
+    let value = (text || "").replace(/\s+/g, " ").trim();
+
+    // "|", "·", "—", "–", "::" casi siempre separan el nombre del sitio.
+    const strongSeparator = /\s+(?:\||·|—|–|::)\s+/;
+    if (strongSeparator.test(value)) {
+        const first = value.split(strongSeparator)[0].trim();
+        if (first.length >= 4) {
+            value = first;
+        }
     }
 
-    return `${raw.slice(0, 80)}_converted.${fileType}`;
+    // Un guion simple solo se recorta si el sufijo final es corto ("Artículo - Wikipedia").
+    const dash = /\s+-\s+(.{1,30})$/.exec(value);
+    if (dash) {
+        const prefix = value.slice(0, dash.index).trim();
+        if (prefix.length >= 4) {
+            value = prefix;
+        }
+    }
+
+    return value;
+}
+
+function domainFromUrl(url) {
+    try {
+        const hostname = new URL(url).hostname;
+        return hostname ? hostname.replace(/^www\./i, "") : "";
+    } catch (e) {
+        return "";
+    }
+}
+
+// Cascada: alt -> URL -> title -> título de pestaña -> dominio -> "imagen".
+// El alt va primero porque suele describir el asunto ("Yotsuba Nakano")
+// mientras que la URL suele ser una ruta genérica ("latest", hashes, ids).
+function buildFileName(imageUrl, fileType, tab, imageInfo) {
+    const info = imageInfo || {};
+    const pageUrl = (tab && tab.url) || "";
+
+    const candidates = [
+        cleanHumanText(info.alt),
+        nameFromUrl(imageUrl),
+        cleanHumanText(info.title),
+        cleanHumanText(tab && tab.title),
+        domainFromUrl(imageUrl) || domainFromUrl(pageUrl)
+    ];
+
+    let base = "";
+
+    for (const candidate of candidates) {
+        const cleaned = sanitizeName(candidate);
+
+        if (cleaned && isMeaningfulBase(cleaned)) {
+            base = cleaned;
+            break;
+        }
+    }
+
+    if (!base) {
+        base = "imagen";
+    }
+
+    base = sanitizeName(base.slice(0, 80)) || "imagen";
+
+    return `${base}.${fileType}`;
 }
 
 // Libera el blobURL cuando ya no puede hacer falta.
@@ -462,6 +596,31 @@ async function startDownload(blob, filename, fileType, askWhereToSave) {
     }
 }
 
+// Pide al content script el alt/title del <img> clicado, para usarlo como nombre.
+// Nunca lanza: si la página no responde, el nombre se resuelve con otras fuentes.
+async function getImageInfo(tab, frameId, imageUrl) {
+    if (!tab || tab.id === undefined) {
+        return null;
+    }
+
+    const options = frameId === undefined ? {} : { frameId: frameId };
+
+    try {
+        const response = await withTimeout(
+            browser.tabs.sendMessage(tab.id, {
+                action: "getImageInfo",
+                imageUrl: imageUrl
+            }, options),
+            IMAGE_INFO_TIMEOUT_MS,
+            "Tiempo de espera agotado"
+        );
+
+        return response || null;
+    } catch (e) {
+        return null;
+    }
+}
+
 async function downloadConvertedImage(imageUrl, tab, frameId) {
     const stored = await browser.storage.local.get(['defaultFileType', 'askWhereToSave']);
     const requestedType = stored.defaultFileType;
@@ -471,9 +630,13 @@ async function downloadConvertedImage(imageUrl, tab, frameId) {
 
     notify("conversion-start", "Convirtiendo imagen", `Iniciando la conversión a ${fileType.toUpperCase()}...`);
 
+    // En paralelo con la conversión: cuando el blob esté listo, el alt ya llegó.
+    const infoPromise = getImageInfo(tab, frameId, imageUrl);
+
     try {
         const blob = await convertImage(imageUrl, fileType, tab, frameId);
-        const filename = buildFileName(imageUrl, fileType, tab);
+        const imageInfo = await infoPromise;
+        const filename = buildFileName(imageUrl, fileType, tab, imageInfo);
 
         await startDownload(blob, filename, fileType, askWhereToSave);
     } finally {

@@ -114,8 +114,50 @@ async function convertInPage(imageUrl, fileType) {
     return encodeImage(img, mimeType);
 }
 
+// Devuelve el alt/title del <img> de la página que corresponde a la URL clicada.
+function findImageInfo(imageUrl) {
+    if (!imageUrl) {
+        return null;
+    }
+
+    const images = Array.from(document.images || []);
+    let emptyCandidate = null;
+
+    for (const img of images) {
+        // currentSrc cubre los srcset (la URL del clic puede ser la resuelta).
+        if (img.currentSrc !== imageUrl && img.src !== imageUrl) {
+            continue;
+        }
+
+        const info = {
+            alt: (img.alt || "").trim(),
+            title: (img.title || "").trim()
+        };
+
+        if (info.alt || info.title) {
+            return info;
+        }
+
+        if (!emptyCandidate) {
+            emptyCandidate = info;
+        }
+    }
+
+    return emptyCandidate;
+}
+
 browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (!message || message.action !== "convertToImage") {
+    if (!message) {
+        return;
+    }
+
+    if (message.action === "getImageInfo") {
+        // Respuesta síncrona: no hace falta mantener el canal abierto.
+        sendResponse(findImageInfo(message.imageUrl) || {});
+        return;
+    }
+
+    if (message.action !== "convertToImage") {
         return;
     }
 
