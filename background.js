@@ -411,7 +411,7 @@ function handleDownloadEnd(downloadId, state, errorCode) {
     }
 }
 
-async function startDownload(blob, filename, fileType) {
+async function startDownload(blob, filename, fileType, askWhereToSave) {
     const blobUrl = URL.createObjectURL(blob);
     let downloadId;
 
@@ -419,7 +419,7 @@ async function startDownload(blob, filename, fileType) {
         downloadId = await browser.downloads.download({
             url: blobUrl,
             filename: filename,
-            saveAs: true,
+            saveAs: askWhereToSave === true,
             conflictAction: "uniquify"
         });
     } catch (error) {
@@ -463,9 +463,11 @@ async function startDownload(blob, filename, fileType) {
 }
 
 async function downloadConvertedImage(imageUrl, tab, frameId) {
-    const stored = await browser.storage.local.get('defaultFileType');
+    const stored = await browser.storage.local.get(['defaultFileType', 'askWhereToSave']);
     const requestedType = stored.defaultFileType;
     const fileType = MIME_TYPES[requestedType] ? requestedType : 'png';
+    // Por defecto no se pregunta: evita cancelaciones y descargas fallidas.
+    const askWhereToSave = stored.askWhereToSave === true;
 
     notify("conversion-start", "Convirtiendo imagen", `Iniciando la conversión a ${fileType.toUpperCase()}...`);
 
@@ -473,7 +475,7 @@ async function downloadConvertedImage(imageUrl, tab, frameId) {
         const blob = await convertImage(imageUrl, fileType, tab, frameId);
         const filename = buildFileName(imageUrl, fileType, tab);
 
-        await startDownload(blob, filename, fileType);
+        await startDownload(blob, filename, fileType, askWhereToSave);
     } finally {
         clearNotification("conversion-start");
     }

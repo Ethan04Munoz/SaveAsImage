@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "SaveToImage",
-  "version": "1.2",
+  "version": "1.3",
   "description": "A firefox extension to allow you to save images in an specific format.",
   "icons": {
     "48": "icons/icon-48.png"

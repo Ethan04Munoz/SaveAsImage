@@ -1,21 +1,30 @@
 document.addEventListener('DOMContentLoaded', function () {
-    // Obtener el elemento select
     const fileTypeSelect = document.getElementById('fileTypeSelect');
+    const askWhereToSaveCheckbox = document.getElementById('askWhereToSave');
 
-    // Cargar la preferencia guardada (si existe)
-    browser.storage.local.get('defaultFileType').then(result => {
+    // Cargar las preferencias guardadas (si existen)
+    browser.storage.local.get(['defaultFileType', 'askWhereToSave']).then(result => {
         if (result.defaultFileType) {
             fileTypeSelect.value = result.defaultFileType;
         }
+
+        // Por defecto no se pregunta: la descarga va directa a Descargas.
+        askWhereToSaveCheckbox.checked = result.askWhereToSave === true;
     });
 
-    // Manejar el cambio de selección
+    // Manejar el cambio de tipo de archivo
     fileTypeSelect.addEventListener('change', function () {
         const selectedFileType = fileTypeSelect.value;
         console.log('Tipo de archivo seleccionado:', selectedFileType);
 
-        // Guardar la preferencia seleccionada
         browser.storage.local.set({ defaultFileType: selectedFileType });
     });
 
+    // Manejar el cambio de "preguntar dónde guardar"
+    askWhereToSaveCheckbox.addEventListener('change', function () {
+        const askWhereToSave = askWhereToSaveCheckbox.checked;
+        console.log('Preguntar dónde guardar:', askWhereToSave);
+
+        browser.storage.local.set({ askWhereToSave: askWhereToSave });
+    });
 });
