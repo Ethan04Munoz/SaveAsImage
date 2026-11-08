@@ -1,30 +1,38 @@
 document.addEventListener('DOMContentLoaded', function () {
-    const fileTypeSelect = document.getElementById('fileTypeSelect');
+    const fileTypeInputs = Array.from(document.querySelectorAll('input[name="fileType"]'));
     const askWhereToSaveCheckbox = document.getElementById('askWhereToSave');
+    const versionKicker = document.getElementById('versionKicker');
+
+    // La versión sale del manifiesto: la UI nunca se queda desfasada.
+    if (versionKicker) {
+        const version = browser.runtime.getManifest().version;
+        versionKicker.textContent = `Firefox · v${version}`;
+    }
 
     // Cargar las preferencias guardadas (si existen)
     browser.storage.local.get(['defaultFileType', 'askWhereToSave']).then(result => {
-        if (result.defaultFileType) {
-            fileTypeSelect.value = result.defaultFileType;
+        const storedType = result.defaultFileType || 'png';
+        const selected = fileTypeInputs.find(input => input.value === storedType) || fileTypeInputs[0];
+
+        if (selected) {
+            selected.checked = true;
         }
 
         // Por defecto no se pregunta: la descarga va directa a Descargas.
         askWhereToSaveCheckbox.checked = result.askWhereToSave === true;
     });
 
-    // Manejar el cambio de tipo de archivo
-    fileTypeSelect.addEventListener('change', function () {
-        const selectedFileType = fileTypeSelect.value;
-        console.log('Tipo de archivo seleccionado:', selectedFileType);
+    // Cambio de formato
+    for (const input of fileTypeInputs) {
+        input.addEventListener('change', () => {
+            if (input.checked) {
+                browser.storage.local.set({ defaultFileType: input.value });
+            }
+        });
+    }
 
-        browser.storage.local.set({ defaultFileType: selectedFileType });
-    });
-
-    // Manejar el cambio de "preguntar dónde guardar"
-    askWhereToSaveCheckbox.addEventListener('change', function () {
-        const askWhereToSave = askWhereToSaveCheckbox.checked;
-        console.log('Preguntar dónde guardar:', askWhereToSave);
-
-        browser.storage.local.set({ askWhereToSave: askWhereToSave });
+    // Cambio de "preguntar dónde guardar"
+    askWhereToSaveCheckbox.addEventListener('change', () => {
+        browser.storage.local.set({ askWhereToSave: askWhereToSaveCheckbox.checked });
     });
 });

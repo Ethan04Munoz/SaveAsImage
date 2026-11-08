@@ -5,35 +5,147 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Acerca de Save to Image</title>
-    <link rel="shortcut icon" href="../icons/new-icon.png" type="image/x-icon">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+    <link rel="icon" href="../icons/new-icon.png" type="image/png">
+    <link rel="stylesheet" href="../styles/theme.css">
     <link rel="stylesheet" href="about.css">
 </head>
 
 <body>
-    <div class="container">
-        <h1>Acerca de Save to Image</h1>
-        <p class="author">Desarrollado por Ethan Muñoz</p>
-        <p class="date">02 de octubre de 2024</p>
-        <p>
-            Esta extensión fue creada con un propósito específico. En una ocasión, mientras veía un video sobre extensiones recomendadas para navegadores, mencionaron una llamada <strong>Save to PNG</strong>. Me pareció una excelente herramienta, ya que te permite guardar una imagen directamente en el formato que más utilizo con frecuencia, lo que evita problemas de compatibilidad, especialmente cuando descargas una imagen en formato <em>WebP</em> y luego necesitas convertirla.
-        </p>
-        <p>
-            Sin embargo, al buscar la extensión para Firefox, que es el navegador que utilizo con mayor frecuencia, descubrí que no estaba disponible. Al mismo tiempo, ya tenía curiosidad por desarrollar una extensión propia, y el hecho de tener una idea concreta de lo que quería hacer me ayudó a tomar la decisión de crear <strong>Save to PNG</strong> para Firefox.
-        </p>
-        <p>
-            Una vez que decidí desarrollar la extensión, me puse manos a la obra. Después de ver un video en YouTube, me di cuenta de que las extensiones de navegador no eran más que HTML, CSS y JavaScript, lo cual tiene sentido cuando lo piensas, pero originalmente esperaba que fueran más complejas o que utilizaran alguna biblioteca específica. Desarrollé una primera versión de la extensión que permite guardar imágenes convertidas a los formatos <strong>PNG</strong>, <strong>JPG</strong> y <strong>WebP</strong>, los formatos que más suelo usar.
-        </p>
-        <p>
-            Aunque el proyecto está temporalmente detenido por falta de tiempo, en el futuro planeo añadir soporte para más tipos de archivos y la opción de guardar las imágenes con una mejor compresión.
-        </p>
+    <a class="skip-link" href="#contenido">Saltar al contenido</a>
 
-        <div class="footer">
-            <a target="_blank" href="https://github.com/Ethan04Munoz">
-                    <img class="github" src="../img/github-Dark.svg" alt="">
+    <header class="topbar">
+        <p class="topbar__brand">
+            <span class="topbar__mark" aria-hidden="true"></span>
+            Save to Image
+        </p>
+        <a class="topbar__link" href="https://github.com/Ethan04Munoz" target="_blank" rel="noopener noreferrer">
+            Código en GitHub <span aria-hidden="true">↗</span>
+        </a>
+    </header>
+
+    <main class="page" id="contenido">
+        <section class="hero" aria-labelledby="titulo">
+            <p class="kicker">Acerca de la extensión</p>
+            <h1 class="hero__title" id="titulo">Guardar imágenes,<br>en el formato que ya usas.</h1>
+            <p class="hero__deck">
+                Una extensión de Firefox para guardar cualquier imagen como PNG, JPG o WEBP.
+                La conversión ocurre en tu equipo: nada se sube a un servidor.
+            </p>
+            <div class="tick-rule" aria-hidden="true"></div>
+        </section>
+
+        <section class="story" aria-labelledby="historia">
+            <aside class="meta" aria-label="Ficha de la extensión">
+                <dl class="meta__list">
+                    <div class="meta__row">
+                        <dt class="kicker">Autor</dt>
+                        <dd>Ethan Muñoz</dd>
+                    </div>
+                    <div class="meta__row">
+                        <dt class="kicker">Publicado</dt>
+                        <dd>02 de octubre de 2024</dd>
+                    </div>
+                    <div class="meta__row">
+                        <dt class="kicker">Conversión</dt>
+                        <dd>Local, sin subir archivos</dd>
+                    </div>
+                    <div class="meta__row">
+                        <dt class="kicker">Formatos</dt>
+                        <dd>PNG · JPG · WEBP</dd>
+                    </div>
+                </dl>
+            </aside>
+
+            <div class="story__body">
+                <h2 class="visually-plain" id="historia">Cómo nació</h2>
+
+                <p class="story__lead">
+                    Esta extensión fue creada con un propósito específico. En una ocasión, mientras veía un video
+                    sobre extensiones recomendadas para navegadores, mencionaron una llamada
+                    <strong>Save to PNG</strong>. Me pareció una excelente herramienta, ya que te permite guardar
+                    una imagen directamente en el formato que más utilizo con frecuencia, lo que evita problemas
+                    de compatibilidad, especialmente cuando descargas una imagen en formato <em>WebP</em> y luego
+                    necesitas convertirla.
+                </p>
+                <p>
+                    Sin embargo, al buscar la extensión para Firefox, que es el navegador que utilizo con mayor
+                    frecuencia, descubrí que no estaba disponible. Al mismo tiempo, ya tenía curiosidad por
+                    desarrollar una extensión propia, y el hecho de tener una idea concreta de lo que quería hacer
+                    me ayudó a tomar la decisión de crear <strong>Save to PNG</strong> para Firefox.
+                </p>
+                <p>
+                    Una vez que decidí desarrollar la extensión, me puse manos a la obra. Después de ver un video
+                    en YouTube, me di cuenta de que las extensiones de navegador no eran más que HTML, CSS y
+                    JavaScript, lo cual tiene sentido cuando lo piensas, pero originalmente esperaba que fueran más
+                    complejas o que utilizaran alguna biblioteca específica. Desarrollé una primera versión de la
+                    extensión que permite guardar imágenes convertidas a los formatos <strong>PNG</strong>,
+                    <strong>JPG</strong> y <strong>WebP</strong>, los formatos que más suelo usar.
+                </p>
+                <p>
+                    Aunque el proyecto está temporalmente detenido por falta de tiempo, en el futuro planeo añadir
+                    soporte para más tipos de archivos y la opción de guardar las imágenes con una mejor
+                    compresión.
+                </p>
+            </div>
+        </section>
+
+        <section class="how" aria-labelledby="como-funciona">
+            <h2 class="section__title" id="como-funciona">Cómo funciona</h2>
+
+            <ol class="steps">
+                <li class="steps__item">
+                    <span class="steps__num" aria-hidden="true">01</span>
+                    <div class="steps__body">
+                        <h3>Elige el formato</h3>
+                        <p>En el popup de la extensión eliges PNG, JPG o WEBP. La preferencia se recuerda para la próxima vez.</p>
+                    </div>
+                </li>
+                <li class="steps__item">
+                    <span class="steps__num" aria-hidden="true">02</span>
+                    <div class="steps__body">
+                        <h3>Clic derecho sobre la imagen</h3>
+                        <p>El menú contextual muestra <strong>Save as PNG</strong>, <strong>Save as JPG</strong> o <strong>Save as WEBP</strong> según tu ajuste.</p>
+                    </div>
+                </li>
+                <li class="steps__item">
+                    <span class="steps__num" aria-hidden="true">03</span>
+                    <div class="steps__body">
+                        <h3>Se convierte y se guarda</h3>
+                        <p>La imagen se re-codifica en tu equipo y cae en Descargas. Si activas «Preguntar dónde guardar», eliges la carpeta.</p>
+                    </div>
+                </li>
+            </ol>
+        </section>
+
+        <section class="formats" aria-labelledby="tres-salidas">
+            <h2 class="section__title" id="tres-salidas">Tres salidas</h2>
+
+            <dl class="ledger">
+                <div class="ledger__row">
+                    <dt class="ledger__code">PNG</dt>
+                    <dd class="ledger__desc">Sin pérdida y con transparencia. El archivo pesa más.</dd>
+                    <dd class="ledger__use">Capturas y gráficos</dd>
+                </div>
+                <div class="ledger__row">
+                    <dt class="ledger__code">JPG</dt>
+                    <dd class="ledger__desc">Compresión con pérdida y sin canal alfa: la transparencia pasa a blanco.</dd>
+                    <dd class="ledger__use">Fotografías</dd>
+                </div>
+                <div class="ledger__row">
+                    <dt class="ledger__code">WEBP</dt>
+                    <dd class="ledger__desc">Buen equilibrio entre peso y calidad, y admite transparencia.</dd>
+                    <dd class="ledger__use">Web</dd>
+                </div>
+            </dl>
+        </section>
+
+        <footer class="footer">
+            <p>Desarrollado por Ethan Muñoz</p>
+            <a href="https://github.com/Ethan04Munoz" target="_blank" rel="noopener noreferrer">
+                github.com/Ethan04Munoz <span aria-hidden="true">↗</span>
             </a>
-        </div>
-    </div>
+        </footer>
+    </main>
 </body>
 
 </html>

@@ -1,0 +1,150 @@
+/* ==========================================================================
+   Save to Image — sistema compartido (popup y página Acerca de)
+   Dirección de arte: mesa de revelado. Papel cálido, tinta cacao y un único
+   acento (luz de seguridad). Sin degradados, sin CDNs, sin plantillas.
+   ========================================================================== */
+
+@font-face {
+    font-family: "Fraunces";
+    src: url("../fonts/fraunces-600.woff2") format("woff2");
+    font-weight: 600;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: "Karla";
+    src: url("../fonts/karla-var.woff2") format("woff2");
+    font-weight: 400 700;
+    font-style: normal;
+    font-display: swap;
+}
+
+:root {
+    color-scheme: light;
+
+    /* Papel y tinta */
+    --paper: #f3ebdd;
+    --paper-soft: #ece1cf;
+    --paper-deep: #e3d5bf;
+    --ink: #1b1714;
+    --ink-soft: #574b40;
+    --ink-faint: #6b5e51;
+
+    /* Un solo acento: luz de seguridad */
+    --red: #b03523;
+    --red-bright: #c9492f;
+    --red-wash: #efd6cf;
+
+    /* Secundario sobrio, solo para superficies */
+    --sage: #5f6b57;
+
+    --rule: rgba(27, 23, 20, 0.18);
+    --rule-strong: rgba(27, 23, 20, 0.42);
+    --solid-shadow: 3px 3px 0 rgba(27, 23, 20, 0.14);
+
+    --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+
+    /* Grano de papel muy sutil */
+    --grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    text-size-adjust: 100%;
+}
+
+body {
+    margin: 0;
+    background-color: var(--paper);
+    background-image: var(--grain);
+    background-repeat: repeat;
+    color: var(--ink);
+    font-family: "Karla", "Segoe UI", sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+    margin: 0;
+    font-family: "Fraunces", Georgia, serif;
+    font-weight: 600;
+    font-optical-sizing: auto;
+    letter-spacing: -0.015em;
+    line-height: 1.02;
+}
+
+p {
+    margin: 0;
+}
+
+a {
+    color: var(--ink);
+}
+
+:focus-visible {
+    outline: 2.5px solid var(--red);
+    outline-offset: 3px;
+    border-radius: 4px;
+}
+
+::selection {
+    background: var(--red-wash);
+    color: var(--ink);
+}
+
+.kicker {
+    margin: 0;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+}
+
+.skip-link {
+    position: absolute;
+    left: 16px;
+    top: -60px;
+    z-index: 10;
+    padding: 8px 14px;
+    background: var(--ink);
+    color: var(--paper);
+    text-decoration: none;
+    border-radius: 6px;
+    transition: top 180ms var(--ease);
+}
+
+.skip-link:focus {
+    top: 16px;
+}
+
+/* Regla decorativa de tira de película (una sola vez por página) */
+.tick-rule {
+    height: 7px;
+    background-image: repeating-linear-gradient(
+        90deg,
+        var(--rule-strong) 0 1.5px,
+        transparent 1.5px 11px
+    );
+    opacity: 0.7;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+}
