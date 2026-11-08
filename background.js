@@ -1,4 +1,52 @@
+"use strict";
+
+const ICON_URL = browser.runtime.getURL("icons/icon-48.png");
+
+// Tipo elegido por el usuario -> MIME real que entiende el codificador del navegador.
+// "image/jpg" NO es un MIME válido: el canvas lo ignora y devuelve PNG en silencio.
+const MIME_TYPES = {
+    png: "image/png",
+    jpg: "image/jpeg",
+    webp: "image/webp"
+};
+
+const CONVERT_TIMEOUT_MS = 30000;
+// Margen durante el cual se conserva el blobURL de una descarga fallida
+// para que el botón "Reintentar" del gestor de descargas siga funcionando.
+const BLOB_URL_TTL_MS = 15 * 60 * 1000;
+
+// downloadId -> { blobUrl, filename, fileType, timeoutId }
+const pendingDownloads = new Map();
+
 let conversionInProgress = false;
+
+const DOWNLOAD_ERRORS = {
+    FILE_FAILED: "No se pudo guardar el archivo (ruta o permisos no válidos).",
+    FILE_ACCESS_DENIED: "Acceso denegado a la carpeta de destino.",
+    FILE_NO_SPACE: "No hay espacio suficiente en el disco.",
+    FILE_NAME_TOO_LONG: "El nombre del archivo es demasiado largo.",
+    FILE_TOO_LARGE: "El archivo es demasiado grande.",
+    NETWORK_FAILED: "Error de red durante la descarga.",
+    NETWORK_TIMEOUT: "La descarga superó el tiempo máximo.",
+    SERVER_BAD_CONTENT: "El contenido recibido no es válido.",
+    USER_CANCELED: "La descarga fue cancelada.",
+    USER_SHUTDOWN: "Firefox se cerró durante la descarga.",
+    CRASH: "La descarga se interrumpió por un fallo inesperado."
+};
+
+// Crea la notificación sin dejar promesas rechazadas sin manejar.
+function notify(id, title, message) {
+    return browser.notifications.create(id, {
+        type: "basic",
+        title: title,
+        message: message,
+        iconUrl: ICON_URL
+    }).catch(() => {});
+}
+
+function clearNotification(id) {
+    return browser.notifications.clear(id).catch(() => {});
+}
 
 // Función para crear o actualizar el menú contextual
 function createOrUpdateContextMenu() {
@@ -27,80 +75,357 @@ browser.storage.onChanged.addListener((changes, areaName) => {
     }
 });
 
+function withTimeout(promise, ms, message) {
+    let timer;
+    const timeout = new Promise((resolve, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), ms);
+    });
+
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
+
+function loadImage(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error("El navegador no pudo decodificar la imagen"));
+        img.src = src;
+    });
+}
+
+function canvasToBlob(canvas, mimeType, quality) {
+    return new Promise((resolve, reject) => {
+        canvas.toBlob(blob => {
+            if (blob) {
+                resolve(blob);
+            } else {
+                reject(new Error(`No se pudo generar el archivo ${mimeType}`));
+            }
+        }, mimeType, quality);
+    });
+}
+
+// Descarga la imagen desde el background (tiene el permiso <all_urls>, por lo que
+// no está limitado por CORS) y la re-codifica con canvas.
+async function convertImage(imageUrl, fileType) {
+    const mimeType = MIME_TYPES[fileType];
+    if (!mimeType) {
+        throw new Error(`Tipo de archivo no soportado: ${fileType}`);
+    }
+
+    if (!imageUrl) {
+        throw new Error("No se pudo obtener la URL de la imagen");
+    }
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CONVERT_TIMEOUT_MS);
+    let sourceBlob;
+
+    try {
+        const response = await fetch(imageUrl, {
+            credentials: "include",
+            signal: controller.signal
+        });
+
+        if (!response.ok) {
+            throw new Error(`El servidor respondió HTTP ${response.status}`);
+        }
+
+        sourceBlob = await response.blob();
+    } catch (error) {
+        if (error.name === "AbortError") {
+            throw new Error("La descarga de la imagen tardó demasiado");
+        }
+        throw error;
+    } finally {
+        clearTimeout(timer);
+    }
+
+    if (!sourceBlob || sourceBlob.size === 0) {
+        throw new Error("La imagen está vacía");
+    }
+
+    if (sourceBlob.type && !sourceBlob.type.startsWith("image/")) {
+        throw new Error(`El servidor devolvió "${sourceBlob.type}", no una imagen`);
+    }
+
+    const objectUrl = URL.createObjectURL(sourceBlob);
+
+    try {
+        const img = await withTimeout(
+            loadImage(objectUrl),
+            CONVERT_TIMEOUT_MS,
+            "La decodificación de la imagen tardó demasiado"
+        );
+
+        const width = img.naturalWidth || img.width;
+        const height = img.naturalHeight || img.height;
+
+        if (!width || !height) {
+            throw new Error("La imagen no tiene dimensiones válidas");
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+
+        // Firefox ignora/limita las dimensiones por encima de su máximo de canvas.
+        if (canvas.width !== width || canvas.height !== height) {
+            throw new Error(`La imagen es demasiado grande (${width}×${height})`);
+        }
+
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+            throw new Error("No se pudo crear el contexto de canvas");
+        }
+
+        // JPEG no tiene canal alfa: sin fondo blanco la transparencia sale negra.
+        if (mimeType === "image/jpeg") {
+            ctx.fillStyle = "#ffffff";
+            ctx.fillRect(0, 0, width, height);
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const quality = mimeType === "image/png" ? undefined : 0.92;
+        const result = await canvasToBlob(canvas, mimeType, quality);
+
+        // Comprobación clave: si el navegador no soporta el MIME solicitado,
+        // canvas.toBlob devuelve PNG en silencio (el bug del "solo renombrar").
+        if (result.type !== mimeType) {
+            throw new Error(
+                `El navegador no puede generar ${mimeType} (generó ${result.type || "un formato desconocido"})`
+            );
+        }
+
+        return result;
+    } finally {
+        URL.revokeObjectURL(objectUrl);
+    }
+}
+
+// Genera un nombre de archivo válido para el sistema operativo.
+function buildFileName(imageUrl, fileType, tab) {
+    let raw = "";
+
+    try {
+        const url = new URL(imageUrl);
+
+        // Los data: y blob: no tienen nombre utilizable (el path es el base64/UUID).
+        if (url.protocol !== "data:" && url.protocol !== "blob:") {
+            raw = url.pathname.split("/").pop() || "";
+
+            try {
+                raw = decodeURIComponent(raw);
+            } catch (e) {
+                // Nombre con escapes inválidos: se usa tal cual.
+            }
+        }
+    } catch (e) {
+        // URL no parseable: se usará el título de la pestaña o "image".
+    }
+
+    raw = raw.replace(/\.[^./\\]+$/, "");
+
+    if (!raw && tab && tab.title) {
+        raw = tab.title;
+    }
+
+    raw = raw
+        .replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_")
+        .replace(/^\.+/, "")
+        .trim();
+
+    if (!raw) {
+        raw = "image";
+    }
+
+    return `${raw.slice(0, 80)}_converted.${fileType}`;
+}
+
+// Libera el blobURL cuando ya no puede hacer falta.
+function releaseDownload(downloadId) {
+    const entry = pendingDownloads.get(downloadId);
+    if (!entry) {
+        return null;
+    }
+
+    clearTimeout(entry.timeoutId);
+    pendingDownloads.delete(downloadId);
+    URL.revokeObjectURL(entry.blobUrl);
+
+    return entry;
+}
+
+// Red de seguridad: si la descarga sigue en curso al cumplirse el TTL, se
+// reprograma; si el usuario borra la entrada, onErased la libera antes.
+function scheduleBlobCleanup(downloadId) {
+    const timeoutId = setTimeout(async () => {
+        const entry = pendingDownloads.get(downloadId);
+        if (!entry) {
+            return;
+        }
+
+        try {
+            const items = await browser.downloads.search({ id: downloadId });
+            const item = items && items[0];
+
+            if (item && item.state === "in_progress") {
+                scheduleBlobCleanup(downloadId);
+                return;
+            }
+        } catch (e) {
+            // Si no se puede comprobar, se libera igualmente.
+        }
+
+        releaseDownload(downloadId);
+    }, BLOB_URL_TTL_MS);
+
+    const entry = pendingDownloads.get(downloadId);
+    if (entry) {
+        entry.timeoutId = timeoutId;
+    }
+}
+
+function handleDownloadEnd(downloadId, state, errorCode) {
+    const entry = pendingDownloads.get(downloadId);
+    if (!entry) {
+        return;
+    }
+
+    if (state === "complete") {
+        // Descarga terminada: ya se puede liberar el blob.
+        releaseDownload(downloadId);
+
+        notify(
+            "conversion-complete",
+            "Conversión Exitosa",
+            `La imagen ha sido convertida y guardada como ${entry.fileType.toUpperCase()}`
+        );
+        return;
+    }
+
+    if (state === "interrupted") {
+        // El blob se conserva A PROPÓSITO para que "Reintentar" funcione.
+        const detail = DOWNLOAD_ERRORS[errorCode] || (errorCode ? `Código: ${errorCode}` : "Error desconocido.");
+
+        notify(
+            "conversion-error",
+            "Error en la descarga",
+            `No se pudo guardar la imagen. ${detail}`
+        );
+    }
+}
+
+async function startDownload(blob, filename, fileType) {
+    const blobUrl = URL.createObjectURL(blob);
+    let downloadId;
+
+    try {
+        downloadId = await browser.downloads.download({
+            url: blobUrl,
+            filename: filename,
+            saveAs: true,
+            conflictAction: "uniquify"
+        });
+    } catch (error) {
+        URL.revokeObjectURL(blobUrl);
+
+        const message = error && error.message ? error.message : String(error);
+        const canceled = /cancel/i.test(message);
+
+        if (canceled) {
+            const canceledError = new Error("La descarga fue cancelada.");
+            canceledError.silent = true;
+            throw canceledError;
+        }
+
+        throw new Error(`No se pudo iniciar la descarga: ${message}`);
+    }
+
+    // El blobURL NO se revoca aquí. downloads.download() resuelve cuando la
+    // descarga empieza, no cuando termina: revocarlo ahora corta la lectura
+    // de los datos y deja inservible el botón "Reintentar" de Firefox.
+    pendingDownloads.set(downloadId, {
+        blobUrl: blobUrl,
+        filename: filename,
+        fileType: fileType,
+        timeoutId: null
+    });
+
+    scheduleBlobCleanup(downloadId);
+
+    // Pequeña carrera: la descarga puede fallar antes de llegar aquí.
+    try {
+        const items = await browser.downloads.search({ id: downloadId });
+        const item = items && items[0];
+
+        if (item && item.state !== "in_progress") {
+            handleDownloadEnd(downloadId, item.state, item.error);
+        }
+    } catch (e) {
+        // Sin comprobación: se esperará al evento onChanged.
+    }
+}
+
+async function downloadConvertedImage(imageUrl, tab) {
+    const stored = await browser.storage.local.get('defaultFileType');
+    const requestedType = stored.defaultFileType;
+    const fileType = MIME_TYPES[requestedType] ? requestedType : 'png';
+
+    notify("conversion-start", "Convirtiendo imagen", `Iniciando la conversión a ${fileType.toUpperCase()}...`);
+
+    try {
+        const blob = await convertImage(imageUrl, fileType);
+        const filename = buildFileName(imageUrl, fileType, tab);
+
+        await startDownload(blob, filename, fileType);
+    } finally {
+        clearNotification("conversion-start");
+    }
+}
+
 browser.contextMenus.onClicked.addListener((info, tab) => {
-    if (info.menuItemId === "convert-to-image" && !conversionInProgress) {
-        conversionInProgress = true;
-        const imageUrl = info.srcUrl;
+    if (info.menuItemId !== "convert-to-image") {
+        return;
+    }
 
-        let originalFileName = imageUrl.split('/').pop().split('?')[0];
-        let nameWithoutExtension = originalFileName.replace(/\.[^/.]+$/, "") || "image";
+    if (conversionInProgress) {
+        notify("conversion-busy", "Conversión en curso", "Espera a que termine la conversión actual.");
+        return;
+    }
 
-        // Obtener el tipo de archivo predeterminado
-        browser.storage.local.get('defaultFileType').then(result => {
-            const defaultFileType = result.defaultFileType || 'png';
+    conversionInProgress = true;
 
-            // Mostrar notificación de inicio
-            browser.notifications.create("conversion-start", {
-                type: "basic",
-                title: "Convirtiendo imagen",
-                message: `Iniciando la conversión a ${defaultFileType.toUpperCase()}...`,
-                iconUrl: browser.runtime.getURL("icons/icon-48.png")
-            });
-
-            function dataURLtoBlob(dataurl) {
-                const arr = dataurl.split(',');
-                const mime = arr[0].match(/:(.*?);/)[1];
-                const bstr = atob(arr[1]);
-                let n = bstr.length;
-                const u8arr = new Uint8Array(n);
-                while (n--) {
-                    u8arr[n] = bstr.charCodeAt(n);
-                }
-                return new Blob([u8arr], { type: mime });
+    downloadConvertedImage(info.srcUrl, tab)
+        .catch(error => {
+            if (error && error.silent) {
+                // El usuario canceló el diálogo: no es un error que deba avisarse.
+                return;
             }
 
-            // Enviar mensaje al content script con el tipo de archivo deseado
-            browser.tabs.sendMessage(tab.id, {
-                action: "convertToImage",
-                imageUrl: imageUrl,
-                fileType: defaultFileType
-            }).then(response => {
-                conversionInProgress = false;
-                if (response && response.imageData) {
-                    // Limpiar la notificación anterior
-                    browser.notifications.clear("conversion-start");
-
-                    // Convertir el data URL a Blob
-                    const blob = dataURLtoBlob(response.imageData);
-                    const url = URL.createObjectURL(blob);
-
-                    browser.downloads.download({
-                        url: url,
-                        filename: `${nameWithoutExtension}_converted.${defaultFileType}`,
-                        saveAs: true
-                    }).then(() => {
-                        // Crear la notificación de conversión exitosa
-                        browser.notifications.create("conversion-complete", {
-                            type: "basic",
-                            title: "Conversión Exitosa",
-                            message: `La imagen ha sido convertida y guardada como ${defaultFileType.toUpperCase()}`,
-                            iconUrl: browser.runtime.getURL("icons/icon-48.png")
-                        });
-
-                        // Liberar el objeto URL temporal
-                        URL.revokeObjectURL(url);
-                    });
-                }
-            }).catch(error => {
-                conversionInProgress = false;
-                console.error("Error en la conversión:", error);
-                browser.notifications.create("conversion-error", {
-                    type: "basic",
-                    title: "Error de Conversión",
-                    message: "No se pudo convertir la imagen. " + error.message,
-                    iconUrl: browser.runtime.getURL("icons/icon-48.png")
-                });
-            });
+            console.error("Error en la conversión:", error);
+            notify(
+                "conversion-error",
+                "Error de Conversión",
+                error.message || String(error)
+            );
+        })
+        .finally(() => {
+            conversionInProgress = false;
         });
+});
+
+// Solo aquí se sabe si la descarga terminó realmente.
+browser.downloads.onChanged.addListener(delta => {
+    if (!delta.state) {
+        return;
     }
+
+    handleDownloadEnd(delta.id, delta.state.current, delta.error && delta.error.current);
+});
+
+// Si el usuario borra la entrada del gestor de descargas, se libera el blob.
+browser.downloads.onErased.addListener(downloadId => {
+    releaseDownload(downloadId);
 });
